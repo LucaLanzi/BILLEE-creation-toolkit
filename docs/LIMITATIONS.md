@@ -8,8 +8,6 @@
   cancel, errors, and normal shutdown, but a hard kill cannot. Keep the E-stop within reach.
 - **Run the bridge on the rover** for real hardware, with `arm_bridge.launch.py`, so its velocity loop doesn't depend on the radio link. This has not been tested on the Jetson.
 - **The solenoid is not controlled by MoveIt.** The team's `arm_solenoid_controller` also fails to activate in mock mode.
-- **The front wheel CAN IDs disagree in the software repo.** `ros2_control.urdf.xacro` uses FR=3 and FL=4, and
-  `odesc/config/node_map.yaml` uses FR=4 and FL=3. The driver uses the URDF, and the export preserves it.
 
 ## Model rules
 
