@@ -23,12 +23,21 @@ def main() -> int:
         process = run([blender, "--enable-event-simulate", "--window-geometry", "0", "0", "1600", "1000",
                        str(Path(folder) / "demo_rover_arm.blend"), "--python", str(ROOT / "tests" / "blender_capture.py"),
                        "--", str(ROOT / "docs" / "images")], env, timeout=130)
-    for line in process.stdout.splitlines():
-        if line.startswith("CAPTURE_"):
-            print(line)
-    if process.returncode:
-        print((process.stdout + process.stderr)[-2500:])
-    return process.returncode
+        blend = str(Path(folder) / "billee.blend")
+        scene = run([blender, "--background", "--factory-startup", "--python-exit-code", "1", "--python",
+                     str(ROOT / "tests" / "blender_billee_export.py"), "--", str(Path(folder) / "out"), blend], env)
+        if scene.returncode:
+            sys.exit("Could not prepare the BILLEE scene:\n" + scene.stdout[-2000:] + scene.stderr[-1000:])
+        billee = run([blender, "--enable-event-simulate", "--window-geometry", "0", "0", "1600", "1000", blend,
+                      "--python", str(ROOT / "tests" / "blender_capture.py"),
+                      "--", str(ROOT / "docs" / "images"), "billee"], env, timeout=60)
+    for result in (process, billee):
+        for line in result.stdout.splitlines():
+            if line.startswith("CAPTURE_"):
+                print(line)
+        if result.returncode:
+            print((result.stdout + result.stderr)[-2500:])
+    return process.returncode or billee.returncode
 
 
 if __name__ == "__main__":

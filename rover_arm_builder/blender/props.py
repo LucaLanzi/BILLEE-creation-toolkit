@@ -372,6 +372,18 @@ class RAB_Project(PropertyGroup):
         default="visualization",
     )
     last_export: StringProperty(name="Last Export", default="")
+    export_format: EnumProperty(
+        name="Export For",
+        items=[("billee", "BILLEE Rover (drop-in)", "A complete robot_description folder for billee-software-2027"),
+               ("generic", "Generic ROS 2 Package", "A standalone description package with its own launch files")],
+        default="billee",
+    )
+    billee_repo: StringProperty(
+        name="Software Repo", subtype="DIR_PATH", default="",
+        description="Optional billee-software-2027 folder to read current wiring from. It is never modified. "
+                    "Empty finds ~/billee-software-2027, then uses the bundled copy",
+    )
+    billee_status: StringProperty(default="", options={"HIDDEN"})
 
     mount_parent_module: EnumProperty(name="Rover / Parent", items=_parent_module_items)
     mount_parent_frame: EnumProperty(name="Parent Frame", items=_parent_frame_items)

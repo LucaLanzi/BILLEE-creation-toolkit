@@ -236,7 +236,8 @@ def module_macro_xml(module: Module, package: str) -> str:
         body.append(node)
 
     macro.extend(body)
-    declared = [f"prefix:={module.prefix}"] + [f"{n}:={v}" for n, v in params.items]
+    # An empty default must be quoted, or xacro reads the next parameter as its value.
+    declared = [f"prefix:={module.prefix or chr(39) * 2}"] + [f"{n}:={v}" for n, v in params.items]
     macro.set("params", " ".join(declared))
     return _serialize(root)
 

@@ -11,7 +11,9 @@ from mathutils import Matrix, Vector
 
 from ..core import model as X
 from ..core.readiness import Stage, evaluate, record_stage
+from ..core.billee_template import build_billee_project
 from ..core.validate import Severity, Target
+from ..exporters.billee import WiringError, analyze, write_dropin
 from ..exporters.package import PackageConflict, write_package
 from ..exporters.urdf import ExportBlocked
 from . import authoring as A
@@ -19,6 +21,12 @@ from .extract import extract_project, validate_scene
 from .props import ACTUATION, FRAME_KINDS, JOINT_TYPES, MODULE_KINDS, SHAPES
 
 UNDO = {"REGISTER", "UNDO"}
+_billee_checked_version = None
+
+
+def billee_status_is_current():
+    """True while the stored drop-in check still describes the current model."""
+    return _billee_checked_version == A.model_version()
 
 
 def active_module(context):
@@ -54,9 +62,16 @@ def active_frame(module):
 
 def run_validation(scene):
     """Validate the scene, publish its issues to the interface, and return the report."""
-    _project, report = validate_scene(scene)
+    global _billee_checked_version
+    model, report = validate_scene(scene)
     order = {Severity.ERROR: 0, Severity.WARNING: 1, Severity.INFO: 2}
     data = scene.rab
+    if data.export_format == "billee":
+        plan = analyze(model, report)
+        report.issues.extend(plan.issues)
+        blockers = len(plan.errors) + len(report.blockers(Target.PHYSICS))
+        data.billee_status = "Ready to replace robot_description" if plan.ready else f"{blockers} issue(s) to fix"
+        _billee_checked_version = A.model_version()
     data.issues.clear()
     for issue in sorted(report.issues, key=lambda i: (order[i.severity], i.code, i.message)):
         item = data.issues.add()
@@ -703,6 +718,8 @@ class RAB_OT_export_package(Operator):
         if not folder or folder.startswith("//") or not os.path.isabs(folder):
             self.report({"ERROR"}, "Save the .blend file or choose an absolute export folder.")
             return {"CANCELLED"}
+        if data.export_format == "billee":
+            return self.export_billee(context, folder)
         window_manager = context.window_manager
         window_manager.progress_begin(0, 3)
         try:
@@ -740,6 +757,56 @@ class RAB_OT_export_package(Operator):
             data.readiness_json = json.dumps(records, sort_keys=True)
         data.last_export = str(destination)
         self.report({"INFO"}, f"Exported to {destination}")
+        return {"FINISHED"}
+
+
+def _export_billee(self, context, folder):
+    """Write a complete robot_description folder. The software repo is only read."""
+    scene = context.scene
+    data = scene.rab
+    window_manager = context.window_manager
+    window_manager.progress_begin(0, 3)
+    try:
+        window_manager.progress_update(1)
+        report = run_validation(scene)
+        project, issues = extract_project(scene)
+        if issues or any(i.severity is Severity.ERROR for i in report.issues):
+            self.report({"ERROR"}, f"Export blocked: {data.billee_status}. See Readiness.")
+            return {"CANCELLED"}
+        window_manager.progress_update(2)
+        wiring = bpy.path.abspath(data.billee_repo) if data.billee_repo else None
+        result = write_dropin(project, folder, wiring)
+    except (ExportBlocked, PackageConflict, WiringError, ValueError, OSError) as exc:
+        self.report({"ERROR"}, f"Export failed: {exc}")
+        return {"CANCELLED"}
+    finally:
+        window_manager.progress_end()
+    data.last_export = str(result.path)
+    self.report({"INFO"}, f"Exported {result.path} using the {result.wiring}")
+    return {"FINISHED"}
+
+
+RAB_OT_export_package.export_billee = _export_billee
+
+
+class RAB_OT_create_billee(Operator):
+    bl_idname = "rab.create_billee"
+    bl_label = "Create BILLEE Rover"
+    bl_description = "Start from BILLEE's six-wheel layout. Chassis shapes and masses are placeholders"
+    bl_options = UNDO
+
+    @classmethod
+    def poll(cls, context):
+        return not len(context.scene.rab.modules)
+
+    def execute(self, context):
+        from .demo_scene import build_demo
+
+        build_demo(context.scene, build_billee_project())
+        context.scene.rab.export_format = "billee"
+        context.scene.rab.package_name = "robot_description"
+        run_validation(context.scene)
+        self.report({"INFO"}, "BILLEE rover created. Chassis shapes and masses are placeholders.")
         return {"FINISHED"}
 
 
@@ -783,12 +850,14 @@ class RAB_OT_create_demo(Operator):
         from .demo_scene import build_demo
 
         build_demo(context.scene)
+        context.scene.rab.export_format = "generic"
         run_validation(context.scene)
         self.report({"INFO"}, "Demo created. Values are illustrative, not measurements.")
         return {"FINISHED"}
 
 
 CLASSES = (
+    RAB_OT_create_billee,
     RAB_OT_create_demo,
     RAB_OT_new_module,
     RAB_OT_duplicate_module,

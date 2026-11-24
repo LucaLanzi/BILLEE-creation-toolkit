@@ -12,7 +12,7 @@
 PYTHON ?= python3
 
 .DEFAULT_GOAL := help
-.PHONY: help install uninstall build bundle test check gui ros docs
+.PHONY: help install uninstall build bundle test check gui ros dropin docs
 
 help: ## Show this list of targets
 	@echo "BILLEE Creation Toolkit"
@@ -43,6 +43,9 @@ gui: ## Run every local check, including a real Blender window
 
 ros: ## Run the real ROS 2 Humble and Gazebo Fortress checks
 	$(PYTHON) -B scripts/ros_gates.py
+
+dropin: ## Prove a generated model replaces the real robot_description
+	$(PYTHON) -B scripts/dropin_check.py
 
 docs: ## Recapture the README screenshots from the real interface
 	$(PYTHON) -B scripts/capture_docs.py

@@ -13,7 +13,7 @@ make docs   # Screenshots, plus the mouse-drag and cancel test
 
 | Check | Result |
 |---|---|
-| Core and exporter unit tests | 56 passed |
+| Core and exporter unit tests | 76 passed |
 | Headless tests inside Blender | 36 passed |
 | Extension build, manifest validation, ZIP validation | Passed |
 | Install, enable/disable/re-enable three times, uninstall | Passed, no leftover handlers or classes |
@@ -50,8 +50,33 @@ mounted read-only and the container has no network. The demo package is exported
 The Gazebo gate found a real design flaw in an earlier demo: two independent rockers let the chassis pitch to the joint
 limit. The demo was changed instead of relaxing the check.
 
+## BILLEE drop-in check
+
+`make dropin` exports the BILLEE rover through the Blender operators, then runs the stock model and the generated model
+through the same unmodified `rover.launch.py` from `billee-software-2027` commit `e18b1f7`. The repo is mounted read-only.
+
+| Check | Stock | Generated |
+|---|---|---|
+| Package builds, real `xacro` and `check_urdf` pass in sim and real modes | Passed | Passed |
+| `diff_drive_controller` and `joint_state_broadcaster` active | Passed | Passed |
+| All six wheel joints publish state | Passed | Passed |
+| TF: `odom`, `base_footprint`, `base_link`, `camera_link`, optical frame | Passed | Passed |
+| ZED sensor, IMU, odometry, and control plugins in the SDF | Passed | Passed |
+| Wheel odometry and Gazebo ground truth publish | Passed | Passed |
+| Drives forward on a forward command | Passed | Passed |
+| Turns left on a positive yaw command | Passed | Passed |
+| Real-hardware `ros2_control` block, including CAN IDs | Reference | Identical |
+
+A literal folder replace in a temporary clone changes only `robot_core.urdf.xacro`, `robot_gz.urdf.xacro`, and
+`camera.urdf.xacro` for the template rover. Controller values change when the model's wheel geometry differs.
+
+The render sensor is removed from temporary copies during simulation because the check has no display. Its definition is
+verified in the SDF. `real.launch.py` reaches hardware loading with both models, then both stop because the ODESC plugin
+could not be created on this desktop, so **the generated model has not driven the real motors**.
+
 ## Not run
 
+- The generated model on the real ODESC drivetrain.
 - MoveIt planning.
 - Any run on Windows or macOS, including their installers.
 - Linux Flatpak discovery.

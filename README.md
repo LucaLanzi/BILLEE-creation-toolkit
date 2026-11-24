@@ -14,7 +14,8 @@ ROS 2 package that runs on the BILLEE software stack.
 
 - [Install](#install)
 - [Build your first robot](#build-your-first-robot)
-- [Run it in ROS 2 and Gazebo](#run-it-in-ros-2-and-gazebo)
+- [Replace the BILLEE robot model](#replace-the-billee-robot-model)
+- [Standalone ROS 2 packages](#standalone-ros-2-packages)
 - [What has been tested](#what-has-been-tested)
 - [Development](#development)
 
@@ -67,8 +68,8 @@ sh Install-Linux.sh --uninstall        # Linux
 
 ## Build your first robot
 
-Want to look around first? Press **Create Demo Robot** in the Robot tab. Its dimensions and masses are illustrative
-and are not BILLEE's real values.
+Press **Create BILLEE Rover** to start from BILLEE's six-wheel layout, or **Create Demo Robot** to look around with a
+small example. Chassis shapes, masses, and demo values are placeholders, so replace them with measured values.
 
 ### 1. Create the rover and its links
 
@@ -132,10 +133,11 @@ Once the problems are fixed, all three targets show as ready to export:
 
 ### 8. Export
 
-In **Export**, choose the complete robot or just the selected module, name the package, pick a folder, and press
+To update the rover software, follow [Replace the BILLEE robot model](#replace-the-billee-robot-model). For any other
+ROS 2 project, set **For** to **Generic ROS 2 Package**, choose the complete robot or one module, and press
 **Export ROS 2 Package**.
 
-![Export panel](docs/images/10-export.png)
+![Generic export panel](docs/images/10-export.png)
 
 ### Handy tips
 
@@ -144,11 +146,57 @@ In **Export**, choose the complete robot or just the selected module, name the p
   **To Origin**, or **To Center** in the Links panel.
 - Moving the whole robot in Blender does not change the export.
 
-## Run it in ROS 2 and Gazebo
+## Replace the BILLEE robot model
 
-Exports target the BILLEE stack in
-[`billee-software-2027`](https://github.com/BILLEE-BroncoSTAR/billee-software-2027): **ROS 2 Humble, Gazebo Fortress,
-and `ign_ros2_control`**. From its dev container:
+The toolkit generates a complete `robot_description` folder for
+[`billee-software-2027`](https://github.com/BILLEE-BroncoSTAR/billee-software-2027). No launch files, configs, or code
+in that repo need to change.
+
+![BILLEE drop-in export](docs/images/11-billee-dropin.png)
+
+1. **Build the rover** with six driven wheels, three on each side. Use X forward, Y left, and Z up.
+2. **Press Check Model.** Under **Export**, wait for **Ready to replace robot_description**.
+3. **Export.** Set **For** to **BILLEE Rover (drop-in)**, choose a folder *outside* the software repo, and press
+   **Export robot_description**.
+4. **Drag and drop.** Drag the new `robot_description` folder onto `billee-software-2027/ros2_ws/src/` and choose
+   **Replace** or **Merge**. Either works.
+5. **Rebuild** from the software repo's dev container:
+
+   ```sh
+   cd ros2_ws
+   pixi run build --packages-select robot_description
+   ```
+
+6. **Launch as usual** from the BILLEE dashboard or with `ros2 launch chassis_bringup rover.launch.py`.
+
+To go back to the committed model, run this from the root of `billee-software-2027`:
+
+```sh
+git restore ros2_ws/src/robot_description && git clean -fd ros2_ws/src/robot_description
+```
+
+### What the toolkit handles for you
+
+| The rover software expects | What the export does |
+|---|---|
+| Joints `joint_wheel_l1` to `r3` | Assigns your wheels by physical position, whatever you named them |
+| `base_footprint` and `base_link` | Creates them, with `base_link` at the turning center |
+| Wheel radius and track width | Measures them from your model and updates `controllers.yaml` |
+| ODESC CAN IDs and hardware settings | Copies them unchanged from your software repo |
+| Gazebo sensors, IMU, odometry, and control | Keeps them unchanged |
+| ZED camera mount | Uses a frame named `camera_link` if you add one, or keeps the current pose |
+
+If `~/billee-software-2027` exists, the export reads its current wiring and never writes to it. Otherwise, set the
+**Software** folder or use the bundled copy from commit `e18b1f7`.
+
+> **Arm and suspension joints export as fixed.** The rover software has no controller for them today, and its current
+> model also uses a fixed suspension. The toolkit warns you about each joint it freezes.
+
+The export also writes `robot_description_export.md` beside the folder, listing exactly how each wheel was mapped.
+
+## Standalone ROS 2 packages
+
+**Generic ROS 2 Package** makes a separate package for **ROS 2 Humble, Gazebo Fortress, and `ign_ros2_control`**:
 
 ```sh
 cp -r my_robot_description ros2_ws/src/
@@ -161,8 +209,8 @@ ros2 launch my_robot_description display.launch.py   # RViz with joint sliders
 ros2 launch my_robot_description gazebo.launch.py    # Gazebo with controllers
 ```
 
-The exported package is separate from the rover's existing `robot_description`, so it does not replace it. Keep your
-own files in `config/user/`. If you edit a generated file, the next export stops and names it instead of overwriting it.
+Keep your own files in `config/user/`. If you edit a generated file, the next export stops and names it instead of
+overwriting it.
 
 ## What has been tested
 
@@ -171,6 +219,8 @@ own files in `config/user/`. If you edit a generated file, the next export stops
 | Blender 5.3.0 interface, undo, save and reload, install and uninstall on Linux | **Tested** |
 | Real `xacro`, URDF parser, and TF on ROS 2 Humble | **Tested** |
 | Gazebo Fortress: spawn, settle, arm control, wheel drive | **Tested** |
+| Drop-in `robot_description` with the unmodified BILLEE launch files in simulation | **Tested** |
+| Drop-in model on the real ODESC drivetrain | **Not tested.** The CAN wiring is copied unchanged |
 | Windows and macOS installers | **Not yet run on those systems** |
 | RViz window | **Not yet opened** |
 | MoveIt | **Not tested.** It is not in the BILLEE Humble environment, so the generated config is a starting point |
@@ -186,6 +236,7 @@ make test     # Fast unit tests, no Blender needed
 make check    # Every local check, in an isolated Blender profile
 make gui      # Also opens a real Blender window
 make ros      # Real ROS 2 Humble and Gazebo checks, using the billee-software-2027 container
+make dropin   # Run the generated robot_description through the unmodified BILLEE launch files
 make bundle   # Build the installer ZIP for all platforms
 make docs     # Recapture the screenshots in this README
 ```

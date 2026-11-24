@@ -66,6 +66,13 @@ I_c = sum(R_i * I_i * R_i^T + m_i * ((d_i . d_i) * Identity - d_i * d_i^T)),  d_
 
 Off-diagonal terms follow URDF, for example `ixy = -integral(x * y dm)`.
 
+## BILLEE drop-in export
+
+`exporters/billee.py` generates geometry and reuses the software stack's wiring. It copies the current
+`robot_description` package, generates `robot_core.urdf.xacro`, and updates only values derived from the model. Wheels
+are assigned by position: left runs rear to front (`l1` to `l3`), right runs front to rear (`r1` to `r3`). It only reads
+the software repo, and it refuses to overwrite a `robot_description` folder it did not generate.
+
 ## Export safety
 
 Files are generated in memory, written to a staging folder, then moved into place. A hash manifest detects edited

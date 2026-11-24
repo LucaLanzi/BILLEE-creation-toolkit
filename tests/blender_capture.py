@@ -109,7 +109,28 @@ def select(project, tab, link_name=None, joint_name=None):
     return module
 
 
+def steps_billee():
+    """One picture of the drop-in export, from a real BILLEE rover scene."""
+    yield from open_robot_tab()
+    if not results[-1][1]:
+        return
+    window, area, region, _ui = areas()
+    project = window.scene.rab
+    select(project, "rover", "base")
+    with bpy.context.temp_override(window=window, area=area, region=region):
+        bpy.ops.rab.validate()
+    results.append(("BILLEE rover is ready to export", project.billee_status.startswith("Ready")))
+    yield from shot("11-billee-dropin", "RAB_PT_export")
+
+
 def steps():
+    yield from open_robot_tab()
+    if not results[-1][1]:
+        return
+    yield from demo_steps()
+
+
+def open_robot_tab():
     window, area, region, ui = areas()
     space = area.spaces.active
     space.show_region_ui = True
@@ -141,6 +162,9 @@ def steps():
         bpy.ops.view3d.view_all()
     yield 0.5
 
+
+def demo_steps():
+    window, area, region, _ui = areas()
     project = window.scene.rab
     select(project, "rover", "front_axle", "front_axle_joint")
     yield from shot("01-rover-links", "RAB_PT_links")
@@ -222,7 +246,7 @@ def tick():
     global sequence
     try:
         if sequence is None:
-            sequence = steps()
+            sequence = steps_billee() if "billee" in sys.argv else steps()
         return next(sequence)
     except StopIteration:
         finish(0 if results and all(p for _, p in results) else 1)

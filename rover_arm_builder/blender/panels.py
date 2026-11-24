@@ -9,7 +9,14 @@ from ..core.readiness import Stage, evaluate
 from ..core.validate import Severity, Target
 from . import authoring as A
 from .extract import validate_scene
-from .operators import active_component, active_frame, active_joint, active_link, active_module
+from .operators import (
+    active_component,
+    active_frame,
+    active_joint,
+    active_link,
+    active_module,
+    billee_status_is_current,
+)
 
 STAGE_ICONS = {
     Stage.MISSING_INPUTS: "ERROR",
@@ -124,7 +131,8 @@ class RAB_PT_main(RobotPanel, Panel):
         if module is not None:
             layout.prop(module, "prefix", text="Prefix")
         else:
-            layout.operator("rab.create_demo", icon="AUTO")
+            layout.operator("rab.create_billee", icon="AUTO")
+            layout.operator("rab.create_demo", icon="OBJECT_DATA")
         layout.operator("rab.setup_workspace", icon="WORKSPACE")
 
 
@@ -412,6 +420,20 @@ class RAB_PT_export(RobotPanel, Panel):
     def draw(self, context):
         layout = self.layout
         project = context.scene.rab
+        layout.prop(project, "export_format", text="For")
+        if project.export_format == "billee":
+            layout.prop(project, "export_dir", text="Folder")
+            layout.prop(project, "billee_repo", text="Software")
+            if billee_status_is_current() and project.billee_status:
+                ready = project.billee_status.startswith("Ready")
+                _note(layout, context, project.billee_status, "CHECKMARK" if ready else "ERROR")
+            else:
+                _note(layout, context, "Press Check Model to confirm this rover fits the software stack.", "QUESTION")
+            layout.operator("rab.export_package", text="Export robot_description", icon="EXPORT")
+            if project.last_export:
+                _note(layout, context, f"Last: {project.last_export}", "CHECKMARK")
+                _note(layout, context, "Drag this folder over ros2_ws/src/robot_description, then rebuild.", "INFO")
+            return
         layout.prop(project, "export_scope", text="Export")
         layout.prop(project, "export_target", text="Ready For")
         layout.prop(project, "package_name", text="Package")

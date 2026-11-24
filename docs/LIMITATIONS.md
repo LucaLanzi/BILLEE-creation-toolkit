@@ -8,6 +8,16 @@
 - **The RViz window** has not been opened. The TF data it displays has been checked.
 - **Drag-and-drop install** and **Install from Disk** have not been exercised.
 
+## BILLEE drop-in export
+
+- It requires exactly six driven wheels with one shared radius, three per side, spinning about Y.
+- Every joint other than the six wheels exports as fixed, including arm and suspension joints, because the rover
+  software has no controller for them.
+- It has been tested in simulation with the unmodified launch files, not on the real ODESC drivetrain.
+- CAN IDs are copied as they are. In commit `e18b1f7`, `ros2_control.urdf.xacro` and `odesc/config/node_map.yaml`
+  disagree on the front wheels: the URDF uses FR=3 and FL=4, while the map uses FR=4 and FL=3. The driver uses the URDF.
+- The bundled wiring can go out of date. A local checkout of `billee-software-2027` is preferred when one is found.
+
 ## Not included in this release
 
 - No gripper builder or standalone arm test pedestal.

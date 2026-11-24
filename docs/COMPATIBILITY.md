@@ -31,6 +31,8 @@ The target matches the locked environment in
 
 Generated packages do not declare MoveIt as a dependency, so they build without it.
 
+The BILLEE drop-in export was verified against `billee-software-2027` branch `PreRelease-DashBoardDev`, commit `e18b1f7`.
+
 ## Related tools
 
 [Phobos](https://github.com/dfki-ric/phobos) is a BSD-3-Clause Blender add-on that creates URDF, SDF, and SMURF models.

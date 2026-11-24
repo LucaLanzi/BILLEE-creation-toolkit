@@ -95,9 +95,9 @@ def _build_module(scene, source):
     return module_uid
 
 
-def build_demo(scene):
-    """Create the demo in `scene`. All values are illustrative, not real measurements."""
-    project = demo.build_demo_project()
+def build_demo(scene, project=None):
+    """Create a starter robot in `scene`. All values are illustrative, not real measurements."""
+    project = project or demo.build_demo_project()
     data = scene.rab
     data.robot_name = project.name
     data.package_name = f"{project.name}_description"

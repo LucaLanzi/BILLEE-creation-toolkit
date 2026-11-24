@@ -21,6 +21,8 @@
 | Gazebo and `ros2_control` configuration | Done and tested in Gazebo Fortress |
 | Blender interface, overlays, demo | Done and tested on Linux |
 | Installers and README | Done. Linux tested |
+| BILLEE drop-in `robot_description` | Done and tested in simulation with the unmodified launch files |
+| Drop-in on the real ODESC drivetrain | Not tested |
 | MoveIt SRDF and launch | Generated, not tested. MoveIt is not in the BILLEE environment |
 | Windows and macOS | Not yet run |
 

@@ -28,6 +28,7 @@ def main():
     rover_arm_builder.register()
     scene = bpy.context.scene
     build_demo(scene)
+    scene.rab.export_format = "generic"
     bpy.context.view_layer.update()
 
     _project, report = validate_scene(scene)

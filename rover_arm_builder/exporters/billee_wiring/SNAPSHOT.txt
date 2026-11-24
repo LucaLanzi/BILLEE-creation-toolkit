@@ -1,0 +1,5 @@
+Snapshot of ros2_ws/src/robot_description from BILLEE-BroncoSTAR/billee-software-2027
+Commit: e18b1f7
+License: Apache-2.0 (see robot_description/LICENSE)
+The maintainer email was replaced with a placeholder. All other files are unchanged.
+Used only when a local billee-software-2027 checkout is not found.

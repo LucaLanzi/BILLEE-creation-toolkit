@@ -60,7 +60,7 @@ def expand_file(path, overrides=None):
         elif node.tag == f"{NS}property":
             scope[node.get("name")] = substitute(node.get("value"), scope)
         elif node.tag == f"{NS}macro":
-            params = dict(item.split(":=", 1) for item in node.get("params").split())
+            params = {k: v.strip("'") for k, v in (item.split(":=", 1) for item in node.get("params").split())}
             macros[node.get("name")] = (params, list(node))
         elif node.tag.startswith(NS):
             params, body = macros[node.tag[len(NS):]]
