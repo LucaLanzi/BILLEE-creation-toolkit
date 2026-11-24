@@ -1,7 +1,7 @@
 schema_version = "1.0.0"
 
 id = "rover_arm_builder"
-version = "0.1.0"
+version = "0.2.0"
 name = "Rover & Arm Builder"
 tagline = "Author rovers and arms and export ROS 2 robot descriptions"
 maintainer = "Rover & Arm Builder contributors"

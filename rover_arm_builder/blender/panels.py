@@ -273,21 +273,6 @@ class RAB_PT_joint(BuilderPanel, Panel):
         row.prop(joint, "damping")
         row.prop(joint, "friction")
 
-        if joint.role in {"arm", "gripper"}:
-            box = layout.box()
-            box.label(text="Real motor", icon="AUTO")
-            box.prop(joint, "drive_kind", text="System")
-            if joint.drive_kind != "none":
-                box.prop(joint, "motor")
-                box.prop(joint, "gear_ratio")
-            if joint.drive_kind == "can":
-                box.prop(joint, "node_id")
-            elif joint.drive_kind == "roboclaw":
-                box.prop(joint, "roboclaw_address", text="Address")
-                box.prop(joint, "roboclaw_channel")
-                box.prop(joint, "qppr", text="Counts / Turn")
-            _note(box, context, "Simulation works without IDs. Real motors stay off until they are set.", "INFO")
-
         box = layout.box()
         box.label(text="Motion preview (never exported)", icon="PLAY")
         row = box.row(align=True)

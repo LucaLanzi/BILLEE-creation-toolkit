@@ -262,24 +262,6 @@ class RAB_Joint(PropertyGroup):
     friction: FloatProperty(name="Friction", default=0.0, min=0.0, precision=4, update=_joint_changed)
     actuation: EnumProperty(name="Physical Actuation", items=ACTUATION, default="fixed", update=_joint_changed)
     role: EnumProperty(name="Control Role", items=ROLES, default="unassigned", update=_joint_changed)
-    drive_kind: EnumProperty(
-        name="Motor System",
-        items=[("none", "Not Set", "No real motor assigned"),
-               ("can", "CAN (P17 / P20)", "Position control through the pxx driver"),
-               ("roboclaw", "RoboClaw (USB)", "goBILDA motor on a RoboClaw controller")],
-        default="none", update=_joint_changed,
-    )
-    motor: StringProperty(name="Motor", default="", update=_joint_changed)
-    node_id: IntProperty(name="CAN Node ID", default=0, min=0, max=127, update=_joint_changed,
-                         description="CANopen node ID, 1 to 127. 0 means not set")
-    gear_ratio: FloatProperty(name="Gear Ratio", default=1.0, min=0.001, update=_joint_changed,
-                              description="Motor-shaft turns per joint turn")
-    roboclaw_address: IntProperty(name="RoboClaw Address", default=0, min=0, max=135, update=_joint_changed,
-                                  description="Packet serial address, 128 to 135. 0 means not set")
-    roboclaw_channel: EnumProperty(name="Channel", items=[("none", "Not Set", ""), ("M1", "M1", ""), ("M2", "M2", "")],
-                                   default="none", update=_joint_changed)
-    qppr: IntProperty(name="Encoder Counts / Joint Turn", default=0, min=0, update=_joint_changed,
-                      description="Whole encoder counts per joint turn. 0 means not set")
     preview: FloatProperty(
         name="Preview", default=0.0, update=_preview_changed,
         description="Temporary display position. Never changes the exported zero pose",

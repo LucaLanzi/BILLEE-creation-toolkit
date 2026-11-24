@@ -121,16 +121,16 @@ def steps_billee():
         bpy.ops.rab.validate()
     results.append(("BILLEE rover and arm are ready to export", project.billee_status.startswith("Ready")))
     project.ui_tab = "assembly"
-    yield from shot("11-billee-dropin", "RAB_PT_export")
+    yield from shot("export", "RAB_PT_export")
     project.mount_parent_module = next(m.uid for m in project.modules if m.kind == "rover")
     project.mount_child_module = next(m.uid for m in project.modules if m.kind == "arm")
     project.mount_parent_frame = next(m for m in project.modules if m.kind == "rover").frames[1].uid
     project.mount_child_frame = next(m for m in project.modules if m.kind == "arm").frames[0].uid
-    yield from shot("12-billee-assembly", "RAB_PT_assembly")
-    module = select(project, "arm", "arm_link_4", "joint_arm_4")
-    for name, value in (("joint_arm_1", 0.6), ("joint_arm_2", -0.5), ("joint_arm_3", 1.1), ("joint_arm_5", 0.7)):
+    yield from shot("assembly", "RAB_PT_assembly")
+    module = select(project, "arm", "wrist_roll", "axis_4")
+    for name, value in (("axis_1", 0.6), ("axis_2", -0.5), ("axis_3", 1.1), ("axis_5", 0.7)):
         next(j for j in module.joints if j.name == name).preview = value
-    yield from shot("13-billee-arm-motor", "RAB_PT_joint")
+    yield from shot("billee-arm", "RAB_PT_joint")
 
 
 def steps():
@@ -177,49 +177,37 @@ def demo_steps():
     window, area, region, _ui = areas()
     project = window.scene.rab
     select(project, "rover", "front_axle", "front_axle_joint")
-    yield from shot("01-rover-links", "RAB_PT_links")
+    yield from shot("rover-links", "RAB_PT_links")
 
     select(project, "rover", "chassis")
-    yield from shot("02-components-mass", "RAB_PT_components")
+    yield from shot("rover-parts", "RAB_PT_components")
 
     module = select(project, "arm", "forearm_link", "elbow_pitch_joint")
     module.joints[0].preview = 0.7
     module.joints[1].preview = 1.0
-    yield from shot("03-joint-preview", "RAB_PT_joint")
+    yield from shot("arm-joints", "RAB_PT_joint")
 
     module = project.modules[project.active_module]
     A.reset_preview(module)
     module.active_frame = next(i for i, f in enumerate(module.frames) if f.kind == "tool")
-    yield from shot("04-frames", "RAB_PT_frames")
+    yield from shot("frames", "RAB_PT_frames")
 
     select(project, "assembly")
-    project.mount_parent_module = project.modules[0].uid
-    project.mount_child_module = project.modules[1].uid
-    project.mount_parent_frame = project.modules[0].frames[0].uid
-    project.mount_child_frame = project.modules[1].frames[0].uid
-    yield from shot("05-assembly", "RAB_PT_assembly")
-
     project.show_collision = True
-    yield from shot("06-collision-overlay", "RAB_PT_display")
+    yield from shot("collision", "RAB_PT_display")
     project.show_collision = False
-
-    yield from shot("07-mass-summary", "RAB_PT_mass_summary")
 
     module = select(project, "arm", "forearm_link", "elbow_pitch_joint")
     joint = next(j for j in module.joints if j.name == "elbow_pitch_joint")
     joint.has_velocity = False
     with bpy.context.temp_override(window=window, area=area, region=region):
         bpy.ops.rab.validate()
-    yield from shot("08-readiness-issue", "RAB_PT_readiness")
+    yield from shot("readiness", "RAB_PT_readiness")
     joint = next(j for j in project.modules[project.active_module].joints if j.name == "elbow_pitch_joint")
     joint.has_velocity = True
     with bpy.context.temp_override(window=window, area=area, region=region):
         bpy.ops.rab.validate()
-    yield from shot("09-readiness-ready", "RAB_PT_readiness")
 
-    project.package_name = "my_robot_description"
-    project.export_dir = "~/ros_ws/src"
-    yield from shot("10-export", "RAB_PT_export")
 
     focus["panel"] = "RAB_PT_joint"
     joint = next(j for j in project.modules[project.active_module].joints if j.name == "elbow_pitch_joint")

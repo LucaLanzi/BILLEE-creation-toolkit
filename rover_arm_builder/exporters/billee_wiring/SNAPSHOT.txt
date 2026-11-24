@@ -1,5 +1,5 @@
-Snapshot of ros2_ws/src/robot_description from BILLEE-BroncoSTAR/billee-software-2027
-Commit: e18b1f7
-License: Apache-2.0 (see robot_description/LICENSE)
-The maintainer email was replaced with a placeholder. All other files are unchanged.
-Used only when a local billee-software-2027 checkout is not found.
+Snapshot of robot_description, arm_description, and arm_bringup/config/arm_axes.yaml
+from BILLEE-BroncoSTAR/billee-software-2027, branch PreRelease-DashBoardDev, commit afb9467.
+Licenses are in each package. Maintainer emails were replaced with a placeholder, and the
+arm's stock meshes are left out because generated models do not use them.
+Used only when a local checkout with these packages is not found.

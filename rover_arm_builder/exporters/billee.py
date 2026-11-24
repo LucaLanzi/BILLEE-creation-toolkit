@@ -38,14 +38,13 @@ from ..core.model import (
 )
 from ..core.transforms import Transform, dot, mat_vec, normalized, scale, sub
 from ..core.validate import Issue, Severity, Target, ValidationReport, validate_project
-from .billee_arm import PACKAGE as ARM_PACKAGE
-from .billee_arm import ArmPlan, analyze_arm, build_moveit_files, real_hardware_gaps, simulation_block
 from .package import PackageConflict
 from .stl import mesh_to_stl_bytes
 from .urdf import ExportBlocked, fmt, mesh_filename, robot_to_urdf
 
 PACKAGE = "robot_description"
-BUNDLED = Path(__file__).resolve().parent / "billee_wiring" / PACKAGE
+BUNDLED_ROOT = Path(__file__).resolve().parent / "billee_wiring"
+BUNDLED = BUNDLED_ROOT / PACKAGE
 AXIS_TOLERANCE = math.cos(math.radians(10.0))
 RADIUS_TOLERANCE = 0.002
 REQUIRED_WIRING = (
@@ -90,8 +89,6 @@ class DropinPlan:
     frozen: list[str] = field(default_factory=list)
     camera_link: str | None = None
     camera_pose: Transform | None = None
-    arm: ArmPlan | None = None
-    real_arm_gaps: list[str] = field(default_factory=list)
 
     @property
     def errors(self) -> list[Issue]:
@@ -147,8 +144,17 @@ def _wheel_radius(link: FlatLink, axis) -> float | None:
     return max(radii) if radii else None
 
 
+def rover_only(project: Project) -> Project:
+    """The rover modules alone. The arm is exported separately, to arm_description."""
+    rovers = [m for m in project.modules if m.kind is not ModuleKind.ARM]
+    ids = {m.id for m in rovers}
+    mounts = [m for m in project.mounts if m.parent_module_id in ids and m.child_module_id in ids]
+    return Project(project.name, rovers, mounts)
+
+
 def analyze(project: Project, report: ValidationReport | None = None) -> DropinPlan:
-    """Work out how this model maps onto the BILLEE software stack, or explain why it cannot."""
+    """Work out how the rover maps onto the BILLEE software stack, or explain why it cannot."""
+    project = rover_only(project)
     report = report or validate_project(project)
     plan = DropinPlan(report)
     robot = report.robot
@@ -238,8 +244,6 @@ def analyze(project: Project, report: ValidationReport | None = None) -> DropinP
     plan.origin_shift = (-center_x, -center_y, -center_z)
 
     for joint in sorted(robot.joints, key=lambda j: j.name):
-        if joint.role in (ControlRole.ARM, ControlRole.GRIPPER) and any(m.kind is ModuleKind.ARM for m in project.modules):
-            continue  # The arm stays movable. billee_arm_moveit_config controls it.
         if joint.type is not JointType.FIXED and joint.name not in plan.wheels:
             plan.frozen.append(joint.name)
             plan.warn("billee_frozen_joint", joint.source_id,
@@ -273,16 +277,6 @@ def analyze(project: Project, report: ValidationReport | None = None) -> DropinP
             plan.error("billee_reserved_name", joint.source_id, f"Joint name {joint.name} is reserved by the rover software.",
                        "Rename the joint or give its module a prefix.")
 
-    if not plan.errors and any(m.kind is ModuleKind.ARM for m in project.modules):
-        rewritten = rewrite_robot(robot, plan)
-        plan.arm = analyze_arm(project, rewritten)
-        plan.issues.extend(plan.arm.issues)
-        if plan.arm.ok:
-            plan.real_arm_gaps = real_hardware_gaps(rewritten, plan.arm)
-            if plan.real_arm_gaps:
-                plan.warn("arm_real_hardware", plan.arm.arm_joints[0] and rewritten.joint(plan.arm.arm_joints[0]).source_id,
-                          f"Simulation and planning are ready. Real arm motors stay off: {len(plan.real_arm_gaps)} item(s) open.",
-                          "See robot_description_export.md for the list.")
     return plan
 
 
@@ -331,6 +325,11 @@ def _is_wiring(path: Path) -> bool:
     return all((path / item).is_file() for item in REQUIRED_WIRING)
 
 
+def wiring_label(path: Path) -> str:
+    bundled = path.resolve().is_relative_to(BUNDLED_ROOT.resolve())
+    return "bundled snapshot (commit afb9467)" if bundled else "local checkout"
+
+
 def find_wiring(explicit: str | os.PathLike | None = None) -> tuple[Path, str]:
     """Prefer a local billee-software-2027 checkout, so the current CAN IDs are always used."""
     candidates = []
@@ -340,12 +339,12 @@ def find_wiring(explicit: str | os.PathLike | None = None) -> tuple[Path, str]:
         candidates.append(Path(os.environ["BILLEE_SOFTWARE_DIR"]).expanduser())
     candidates.append(Path.home() / "billee-software-2027")
     for candidate in candidates:
-        for path in (candidate / "ros2_ws" / "src" / PACKAGE, candidate):
+        for path in (candidate / "ros2_ws" / "src" / PACKAGE, candidate / PACKAGE, candidate):
             if _is_wiring(path):
-                return path, "local checkout"
+                return path, wiring_label(path)
     if explicit:
         raise WiringError(f"No robot_description package found in {explicit}.")
-    return BUNDLED, "bundled snapshot (commit e18b1f7)"
+    return BUNDLED, wiring_label(BUNDLED)
 
 
 def _read_wiring(path: Path) -> dict[str, bytes]:
@@ -363,13 +362,11 @@ def _patch_number(text: str, key: str, value: float) -> str:
     return patched
 
 
-def _core_xacro(robot: FlatRobot, arm: ArmPlan | None = None) -> str:
+def _core_xacro(robot: FlatRobot) -> str:
     opening = '<robot name="robot">\n'
     urdf = robot_to_urdf(robot, PACKAGE)
     if opening not in urdf:
         raise WiringError("Could not prepare robot_core.urdf.xacro.")
-    if arm is not None:
-        urdf = urdf.replace("</robot>", simulation_block(arm) + "</robot>")
     # camera.urdf.xacro refers to the silver material by name, so the core must define it.
     replacement = ('<robot name="robot" xmlns:xacro="http://www.ros.org/wiki/xacro">\n'
                    '  <material name="silver">\n    <color rgba="0.7 0.7 0.7 1" />\n  </material>\n')
@@ -394,7 +391,7 @@ def build_files(project: Project, wiring: str | os.PathLike | None = None) -> tu
         raise WiringError(f"ros2_control.urdf.xacro does not define: {', '.join(absent)}.")
 
     robot = rewrite_robot(plan.report.robot, plan)
-    files["urdf/robot_core.urdf.xacro"] = _core_xacro(robot, plan.arm).encode("utf-8")
+    files["urdf/robot_core.urdf.xacro"] = _core_xacro(robot).encode("utf-8")
 
     controllers = files["config/controllers.yaml"].decode("utf-8")
     controllers = _patch_number(controllers, "wheel_separation", plan.separation)
@@ -446,17 +443,6 @@ def _report(plan: DropinPlan, label: str) -> str:
     warnings = [i for i in plan.issues if i.severity is Severity.WARNING and i.code != "billee_frozen_joint"]
     if warnings:
         lines += ["", "Warnings:", ""] + [f"- {i.message}" for i in warnings]
-    if plan.arm is not None:
-        lines += ["", "## Arm", "",
-                  f"`{ARM_PACKAGE}` is a separate package. Copy it into `ros2_ws/src/` beside `robot_description`.",
-                  "It needs MoveIt 2 for Humble, which is not in the current software environment.", "",
-                  f"- Planning group `arm`: {', '.join(plan.arm.arm_joints)}",
-                  f"- End effector group `gripper`: {', '.join(plan.arm.gripper_joints) or 'none'}"]
-        for name, joints in plan.arm.controllers.items():
-            lines.append(f"- `{name}`: {', '.join(joints)}")
-        if plan.real_arm_gaps:
-            lines += ["", "Real arm motors stay off until these are resolved:", ""]
-            lines += [f"- {gap}" for gap in plan.real_arm_gaps]
     return "\n".join(lines) + "\n"
 
 
@@ -466,7 +452,6 @@ class DropinResult:
     report_path: Path
     plan: DropinPlan
     wiring: str
-    moveit_path: Path | None = None
 
 
 def _check_destination(parent: Path, name: str) -> None:
@@ -514,35 +499,12 @@ def _install_tree(parent: Path, name: str, files: dict[str, bytes]) -> Path:
 
 
 def write_dropin(project: Project, output: str | os.PathLike, wiring: str | os.PathLike | None = None) -> DropinResult:
-    """Write robot_description, plus billee_arm_moveit_config when the project has an arm."""
+    """Write robot_description for the rover. Any arm module is left to billee_arm."""
     files, plan, label = build_files(project, wiring)
-    moveit = None
-    if plan.arm is not None:
-        moveit = build_moveit_files(rewrite_robot(plan.report.robot, plan), plan.arm)
     parent = Path(output).expanduser()
     _check_destination(parent, PACKAGE)
-    if moveit is not None:
-        _check_destination(parent, ARM_PACKAGE)
     parent.mkdir(parents=True, exist_ok=True)
     destination = _install_tree(parent, PACKAGE, files)
-    moveit_path = _install_tree(parent, ARM_PACKAGE, moveit) if moveit is not None else None
     report_path = parent / f"{PACKAGE}_export.md"
     report_path.write_text(_report(plan, label), encoding="utf-8", newline="\n")
-    return DropinResult(destination, report_path, plan, label, moveit_path)
-
-
-def write_arm_only(project: Project, output: str | os.PathLike) -> tuple[Path, ArmPlan]:
-    """Write a standalone MoveIt package for the arm module, with its own model and mock hardware."""
-    arms = [m for m in project.modules if m.kind is ModuleKind.ARM]
-    if len(arms) != 1:
-        raise ValueError("Standalone arm export needs exactly one arm module.")
-    report = validate_project(project, [arms[0].id], "billee_arm")
-    if not report.ok(Target.PHYSICS):
-        raise ExportBlocked(Target.PHYSICS, report.blockers(Target.PHYSICS))
-    plan = analyze_arm(Project("billee_arm", [arms[0]]), report.robot)
-    if not plan.ok:
-        raise ExportBlocked(Target.PLANNING, [i for i in plan.issues if i.severity is Severity.ERROR])
-    parent = Path(output).expanduser()
-    _check_destination(parent, ARM_PACKAGE)
-    parent.mkdir(parents=True, exist_ok=True)
-    return _install_tree(parent, ARM_PACKAGE, build_moveit_files(report.robot, plan, standalone=True)), plan
+    return DropinResult(destination, report_path, plan, label)

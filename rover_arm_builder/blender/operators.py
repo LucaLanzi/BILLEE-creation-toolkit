@@ -13,8 +13,8 @@ from ..core import model as X
 from ..core.readiness import Stage, evaluate, record_stage
 from ..core.billee_template import build_billee_arm, build_billee_assembly, build_billee_project
 from ..core.validate import Severity, Target
-from ..exporters.billee import WiringError, analyze, write_arm_only, write_dropin
-from ..exporters.billee_arm import analyze_arm
+from ..exporters.billee import WiringError, analyze, write_dropin
+from ..exporters.billee_arm import analyze_arm, find_arm_wiring, parse_axes, write_arm, write_assembly
 from ..exporters.package import PackageConflict, write_package
 from ..exporters.urdf import ExportBlocked
 from . import authoring as A
@@ -70,6 +70,36 @@ def _billee_selection(data):
     return None
 
 
+def _billee_check(model, report, selected, data):
+    """Add rover and arm contract issues to the report and return a one-line status."""
+    wiring = bpy.path.abspath(data.billee_repo) if data.billee_repo else None
+    scoped = model if selected is None else X.Project(model.name, [model.module(selected[0])], [])
+    kinds = {m.kind for m in scoped.modules}
+    ready = True
+    if X.ModuleKind.ROVER in kinds:
+        plan = analyze(scoped)
+        report.issues.extend(plan.issues)
+        ready = ready and plan.ready
+    if X.ModuleKind.ARM in kinds:
+        try:
+            axes = parse_axes(find_arm_wiring(wiring)[1].read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            report.add("arm_wiring", model.name, f"Could not read arm_axes.yaml: {exc}", "Check the Software folder.")
+            return "Arm wiring not found"
+        arm = analyze_arm(scoped, axes)
+        report.issues.extend(arm.issues)
+        ready = ready and arm.ready
+    if len(kinds & {X.ModuleKind.ROVER, X.ModuleKind.ARM}) == 2 and not model.mounts:
+        report.add("arm_not_mounted", model.name, "The arm is not mounted on the rover.",
+                   "Mount it in the Assembly tab, or set Export to Active Module Only.")
+        ready = False
+    if not ready:
+        return f"{sum(i.severity is Severity.ERROR for i in report.issues)} issue(s) to fix"
+    if kinds >= {X.ModuleKind.ROVER, X.ModuleKind.ARM}:
+        return "Ready: rover, arm, and MoveIt packages"
+    return "Ready: arm and MoveIt packages" if X.ModuleKind.ARM in kinds else "Ready to replace robot_description"
+
+
 def run_validation(scene):
     """Validate the scene, publish its issues to the interface, and return the report."""
     global _billee_checked_version
@@ -78,19 +108,7 @@ def run_validation(scene):
     selected = _billee_selection(data)
     model, report = validate_scene(scene, selected)
     if data.export_format == "billee":
-        scoped = model if selected is None else X.Project(model.name, [model.module(selected[0])])
-        if selected is not None and scoped.modules[0].kind is X.ModuleKind.ARM:
-            arm = analyze_arm(scoped, report.robot) if report.robot is not None else None
-            if arm is not None:
-                report.issues.extend(arm.issues)
-            ready = arm is not None and arm.ok and report.ok(Target.PHYSICS)
-            data.billee_status = "Ready to export the arm's MoveIt package" if ready else "Arm has issues to fix"
-        else:
-            plan = analyze(scoped, report)
-            report.issues.extend(plan.issues)
-            blockers = len(plan.errors) + len(report.blockers(Target.PHYSICS))
-            label = "Ready: rover and arm packages" if plan.arm is not None else "Ready to replace robot_description"
-            data.billee_status = label if plan.ready else f"{blockers} issue(s) to fix"
+        data.billee_status = _billee_check(model, report, selected, data)
         _billee_checked_version = A.model_version()
     data.issues.clear()
     for issue in sorted(report.issues, key=lambda i: (order[i.severity], i.code, i.message)):
@@ -797,24 +815,26 @@ def _export_billee(self, context, folder):
             self.report({"ERROR"}, f"Export blocked: {data.billee_status}. See Readiness.")
             return {"CANCELLED"}
         window_manager.progress_update(2)
-        if selected is not None:
-            module = project.module(selected[0])
-            project = X.Project(project.name, [module])
-            if module.kind is X.ModuleKind.ARM:
-                path, _plan = write_arm_only(project, folder)
-                data.last_export = str(path)
-                self.report({"INFO"}, f"Exported the standalone arm package to {path}")
-                return {"FINISHED"}
         wiring = bpy.path.abspath(data.billee_repo) if data.billee_repo else None
-        result = write_dropin(project, folder, wiring)
+        if selected is not None:
+            project = X.Project(project.name, [project.module(selected[0])], [])
+        kinds = {m.kind for m in project.modules}
+        if kinds >= {X.ModuleKind.ROVER, X.ModuleKind.ARM}:
+            result = write_assembly(project, folder, wiring)
+            target, label = result.rover_path.parent, "robot_description, arm_description, and billee_arm_moveit_config"
+        elif X.ModuleKind.ARM in kinds:
+            result = write_arm(project, folder, wiring)
+            target, label = result.arm_path.parent, "arm_description and billee_arm_moveit_config"
+        else:
+            result = write_dropin(project, folder, wiring)
+            target, label = result.path.parent, "robot_description"
     except (ExportBlocked, PackageConflict, WiringError, ValueError, OSError) as exc:
         self.report({"ERROR"}, f"Export failed: {exc}")
         return {"CANCELLED"}
     finally:
         window_manager.progress_end()
-    data.last_export = str(result.path.parent if result.moveit_path else result.path)
-    packages = "robot_description and billee_arm_moveit_config" if result.moveit_path else "robot_description"
-    self.report({"INFO"}, f"Exported {packages} to {result.path.parent} using the {result.wiring}")
+    data.last_export = str(target)
+    self.report({"INFO"}, f"Exported {label} to {target} using the {result.wiring}")
     return {"FINISHED"}
 
 

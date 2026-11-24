@@ -188,22 +188,8 @@ def _joint(joint, scale):
         parent_id=joint.parent_uid, child_id=joint.child_uid,
         origin=_pose(joint.origin, scale), axis=tuple(float(v) for v in joint.axis),
         limit=limit, damping=float(joint.damping), friction=float(joint.friction),
-        actuation=X.Actuation(joint.actuation), role=X.ControlRole(joint.role), drive=_drive(joint),
+        actuation=X.Actuation(joint.actuation), role=X.ControlRole(joint.role),
     )
-
-
-def _drive(joint):
-    if joint.drive_kind == "can":
-        return X.MotorDrive(X.DriveKind.CAN, joint.motor or "P20 or P17", node_id=joint.node_id or None,
-                            gear_ratio=float(joint.gear_ratio))
-    if joint.drive_kind == "roboclaw":
-        return X.MotorDrive(
-            X.DriveKind.ROBOCLAW, joint.motor or "goBILDA 5203 19.2:1", gear_ratio=float(joint.gear_ratio),
-            address=joint.roboclaw_address if joint.roboclaw_address >= 128 else None,
-            channel=None if joint.roboclaw_channel == "none" else joint.roboclaw_channel,
-            qppr=joint.qppr or None,
-        )
-    return None
 
 
 def extract_project(scene, depsgraph=None):

@@ -149,35 +149,6 @@ def generate_launch_description():
     ])
 '''
 
-_MOVEIT_LAUNCH = '''import os
-
-from ament_index_python.packages import get_package_share_directory
-from launch import LaunchDescription
-from launch_ros.actions import Node
-from moveit_configs_utils import MoveItConfigsBuilder
-
-
-def generate_launch_description():
-    share = get_package_share_directory("@PACKAGE@")
-    config = (
-        MoveItConfigsBuilder("@ROBOT@", package_name="@PACKAGE@")
-        .robot_description(file_path=os.path.join(share, "urdf", "assembly.urdf.xacro"))
-        .robot_description_semantic(file_path="config/moveit/robot.srdf")
-        .robot_description_kinematics(file_path="config/moveit/kinematics.yaml")
-        .joint_limits(file_path="config/moveit/joint_limits.yaml")
-        .trajectory_execution(file_path="config/moveit/moveit_controllers.yaml")
-        .planning_pipelines(pipelines=["ompl"])
-        .to_moveit_configs()
-    )
-    return LaunchDescription([
-        Node(package="robot_state_publisher", executable="robot_state_publisher",
-             parameters=[config.robot_description]),
-        Node(package="moveit_ros_move_group", executable="move_group", output="screen",
-             parameters=[config.to_dict()]),
-    ])
-'''
-
-
 def _rviz(fixed_frame: str) -> str:
     return f"""Panels:
   - Class: rviz_common/Displays
@@ -287,9 +258,8 @@ Target stack: ROS 2 Humble with Gazebo Fortress and `ign_ros2_control`.
     ros2 launch {package} display.launch.py
     ros2 launch {package} gazebo.launch.py
 
-MoveIt is optional and is not a package dependency. If MoveIt 2 for Humble is installed:
-
-    ros2 launch {package} moveit.launch.py
+`config/moveit/` holds a starting SRDF and limits for the MoveIt Setup Assistant. For the BILLEE rover
+and arm, use the BILLEE export instead.
 
 Models in `urdf/`: `{robot}.urdf` (plain), `assembly.urdf.xacro`, one `standalone_*.urdf.xacro` per
 module, and `gazebo.urdf.xacro` (simulator-specific additions).
@@ -356,7 +326,6 @@ def build_files(project: Project, package: str, target: Target = Target.VISUALIZ
     )
     text["launch/display.launch.py"] = substitute(_DISPLAY_LAUNCH)
     text["launch/gazebo.launch.py"] = substitute(_GAZEBO_LAUNCH)
-    text["launch/moveit.launch.py"] = substitute(_MOVEIT_LAUNCH)
     text["meshes/.gitkeep"] = ""
 
     files = {path: content.encode("utf-8") for path, content in text.items()}

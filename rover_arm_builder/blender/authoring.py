@@ -769,8 +769,7 @@ def duplicate_module(scene, source_index):
         joint.parent_uid, joint.child_uid = fresh(old.parent_uid), fresh(old.child_uid)
         with _Guard():
             for key in ("type", "axis", "has_position_limits", "lower", "upper", "has_velocity", "velocity",
-                        "has_effort", "effort", "damping", "friction", "actuation", "role", "drive_kind",
-                        "motor", "node_id", "gear_ratio", "roboclaw_address", "roboclaw_channel", "qppr"):
+                        "has_effort", "effort", "damping", "friction", "actuation", "role"):
                 setattr(joint, key, getattr(old, key))
             joint.origin.location, joint.origin.rotation = old.origin.location, old.origin.rotation
 
