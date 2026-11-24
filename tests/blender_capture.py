@@ -119,8 +119,18 @@ def steps_billee():
     select(project, "rover", "base")
     with bpy.context.temp_override(window=window, area=area, region=region):
         bpy.ops.rab.validate()
-    results.append(("BILLEE rover is ready to export", project.billee_status.startswith("Ready")))
+    results.append(("BILLEE rover and arm are ready to export", project.billee_status.startswith("Ready")))
+    project.ui_tab = "assembly"
     yield from shot("11-billee-dropin", "RAB_PT_export")
+    project.mount_parent_module = next(m.uid for m in project.modules if m.kind == "rover")
+    project.mount_child_module = next(m.uid for m in project.modules if m.kind == "arm")
+    project.mount_parent_frame = next(m for m in project.modules if m.kind == "rover").frames[1].uid
+    project.mount_child_frame = next(m for m in project.modules if m.kind == "arm").frames[0].uid
+    yield from shot("12-billee-assembly", "RAB_PT_assembly")
+    module = select(project, "arm", "arm_link_4", "joint_arm_4")
+    for name, value in (("joint_arm_1", 0.6), ("joint_arm_2", -0.5), ("joint_arm_3", 1.1), ("joint_arm_5", 0.7)):
+        next(j for j in module.joints if j.name == name).preview = value
+    yield from shot("13-billee-arm-motor", "RAB_PT_joint")
 
 
 def steps():

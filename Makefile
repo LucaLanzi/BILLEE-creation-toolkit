@@ -12,7 +12,7 @@
 PYTHON ?= python3
 
 .DEFAULT_GOAL := help
-.PHONY: help install uninstall build bundle test check gui ros dropin docs
+.PHONY: help install uninstall build bundle test check gui ros dropin moveit-env moveit docs
 
 help: ## Show this list of targets
 	@echo "BILLEE Creation Toolkit"
@@ -46,6 +46,12 @@ ros: ## Run the real ROS 2 Humble and Gazebo Fortress checks
 
 dropin: ## Prove a generated model replaces the real robot_description
 	$(PYTHON) -B scripts/dropin_check.py
+
+moveit-env: ## Build the isolated MoveIt 2 test layer (multi-GB download)
+	bash scripts/setup_moveit_env.sh
+
+moveit: ## Prove MoveIt plans and executes the arm on the rover stack
+	$(PYTHON) -B scripts/moveit_check.py
 
 docs: ## Recapture the README screenshots from the real interface
 	$(PYTHON) -B scripts/capture_docs.py

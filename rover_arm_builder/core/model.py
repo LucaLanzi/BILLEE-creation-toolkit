@@ -42,6 +42,7 @@ class Actuation(Enum):
 
 class ControlRole(Enum):
     ARM = "arm"
+    GRIPPER = "gripper"
     BASE_DRIVE = "base_drive"
     STEERING = "steering"
     PASSIVE_SUSPENSION = "passive_suspension"
@@ -229,6 +230,30 @@ class JointLimit:
     effort: float | None = None
 
 
+class DriveKind(Enum):
+    CAN = "can"            # P17 or P20 through the pxx CANopen driver (position commands)
+    ROBOCLAW = "roboclaw"  # goBILDA motor on a RoboClaw over USB (velocity commands)
+
+
+@dataclass(frozen=True)
+class MotorDrive:
+    """How a real motor drives a joint. Unset IDs block real-hardware export, never simulation."""
+
+    kind: DriveKind
+    motor: str
+    node_id: int | None = None
+    gear_ratio: float = 1.0
+    address: int | None = None
+    channel: str | None = None
+    qppr: int | None = None
+
+    def missing(self) -> list[str]:
+        if self.kind is DriveKind.CAN:
+            return [] if self.node_id is not None else ["CAN node ID"]
+        needed = (("RoboClaw address", self.address), ("motor channel", self.channel), ("encoder counts", self.qppr))
+        return [label for label, value in needed if value is None]
+
+
 @dataclass
 class Joint:
     """`origin` is T_P_J. The child link frame equals the joint frame at zero."""
@@ -245,6 +270,7 @@ class Joint:
     friction: float = 0.0
     actuation: Actuation = Actuation.FIXED
     role: ControlRole = ControlRole.UNASSIGNED
+    drive: MotorDrive | None = None
 
 
 @dataclass

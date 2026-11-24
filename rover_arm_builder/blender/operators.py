@@ -5,15 +5,16 @@ import os
 from pathlib import Path
 
 import bpy
-from bpy.props import EnumProperty, FloatProperty, FloatVectorProperty, IntProperty, StringProperty
+from bpy.props import BoolProperty, EnumProperty, FloatProperty, FloatVectorProperty, IntProperty, StringProperty
 from bpy.types import Operator
 from mathutils import Matrix, Vector
 
 from ..core import model as X
 from ..core.readiness import Stage, evaluate, record_stage
-from ..core.billee_template import build_billee_project
+from ..core.billee_template import build_billee_arm, build_billee_assembly, build_billee_project
 from ..core.validate import Severity, Target
-from ..exporters.billee import WiringError, analyze, write_dropin
+from ..exporters.billee import WiringError, analyze, write_arm_only, write_dropin
+from ..exporters.billee_arm import analyze_arm
 from ..exporters.package import PackageConflict, write_package
 from ..exporters.urdf import ExportBlocked
 from . import authoring as A
@@ -60,17 +61,36 @@ def active_frame(module):
     return None
 
 
+def _billee_selection(data):
+    """The one module to export, or None for the complete assembly."""
+    if data.export_format != "billee" or data.export_scope != "active":
+        return None
+    if 0 <= data.active_module < len(data.modules):
+        return [data.modules[data.active_module].uid]
+    return None
+
+
 def run_validation(scene):
     """Validate the scene, publish its issues to the interface, and return the report."""
     global _billee_checked_version
-    model, report = validate_scene(scene)
     order = {Severity.ERROR: 0, Severity.WARNING: 1, Severity.INFO: 2}
     data = scene.rab
+    selected = _billee_selection(data)
+    model, report = validate_scene(scene, selected)
     if data.export_format == "billee":
-        plan = analyze(model, report)
-        report.issues.extend(plan.issues)
-        blockers = len(plan.errors) + len(report.blockers(Target.PHYSICS))
-        data.billee_status = "Ready to replace robot_description" if plan.ready else f"{blockers} issue(s) to fix"
+        scoped = model if selected is None else X.Project(model.name, [model.module(selected[0])])
+        if selected is not None and scoped.modules[0].kind is X.ModuleKind.ARM:
+            arm = analyze_arm(scoped, report.robot) if report.robot is not None else None
+            if arm is not None:
+                report.issues.extend(arm.issues)
+            ready = arm is not None and arm.ok and report.ok(Target.PHYSICS)
+            data.billee_status = "Ready to export the arm's MoveIt package" if ready else "Arm has issues to fix"
+        else:
+            plan = analyze(scoped, report)
+            report.issues.extend(plan.issues)
+            blockers = len(plan.errors) + len(report.blockers(Target.PHYSICS))
+            label = "Ready: rover and arm packages" if plan.arm is not None else "Ready to replace robot_description"
+            data.billee_status = label if plan.ready else f"{blockers} issue(s) to fix"
         _billee_checked_version = A.model_version()
     data.issues.clear()
     for issue in sorted(report.issues, key=lambda i: (order[i.severity], i.code, i.message)):
@@ -770,10 +790,21 @@ def _export_billee(self, context, folder):
         window_manager.progress_update(1)
         report = run_validation(scene)
         project, issues = extract_project(scene)
-        if issues or any(i.severity is Severity.ERROR for i in report.issues):
+        selected = _billee_selection(data)
+        owners = None if selected is None else {selected[0]}
+        relevant = issues if owners is None else [i for i in report.issues if i.severity is Severity.ERROR]
+        if relevant or any(i.severity is Severity.ERROR for i in report.issues):
             self.report({"ERROR"}, f"Export blocked: {data.billee_status}. See Readiness.")
             return {"CANCELLED"}
         window_manager.progress_update(2)
+        if selected is not None:
+            module = project.module(selected[0])
+            project = X.Project(project.name, [module])
+            if module.kind is X.ModuleKind.ARM:
+                path, _plan = write_arm_only(project, folder)
+                data.last_export = str(path)
+                self.report({"INFO"}, f"Exported the standalone arm package to {path}")
+                return {"FINISHED"}
         wiring = bpy.path.abspath(data.billee_repo) if data.billee_repo else None
         result = write_dropin(project, folder, wiring)
     except (ExportBlocked, PackageConflict, WiringError, ValueError, OSError) as exc:
@@ -781,8 +812,9 @@ def _export_billee(self, context, folder):
         return {"CANCELLED"}
     finally:
         window_manager.progress_end()
-    data.last_export = str(result.path)
-    self.report({"INFO"}, f"Exported {result.path} using the {result.wiring}")
+    data.last_export = str(result.path.parent if result.moveit_path else result.path)
+    packages = "robot_description and billee_arm_moveit_config" if result.moveit_path else "robot_description"
+    self.report({"INFO"}, f"Exported {packages} to {result.path.parent} using the {result.wiring}")
     return {"FINISHED"}
 
 
@@ -795,6 +827,9 @@ class RAB_OT_create_billee(Operator):
     bl_description = "Start from BILLEE's six-wheel layout. Chassis shapes and masses are placeholders"
     bl_options = UNDO
 
+    with_arm: BoolProperty(name="Include Arm", default=False,
+                           description="Also add the five-axis arm, mounted on the rover")
+
     @classmethod
     def poll(cls, context):
         return not len(context.scene.rab.modules)
@@ -802,11 +837,30 @@ class RAB_OT_create_billee(Operator):
     def execute(self, context):
         from .demo_scene import build_demo
 
-        build_demo(context.scene, build_billee_project())
+        build_demo(context.scene, build_billee_assembly() if self.with_arm else build_billee_project())
         context.scene.rab.export_format = "billee"
         context.scene.rab.package_name = "robot_description"
         run_validation(context.scene)
-        self.report({"INFO"}, "BILLEE rover created. Chassis shapes and masses are placeholders.")
+        self.report({"INFO"}, "BILLEE model created. Shapes, masses, and limits are placeholders.")
+        return {"FINISHED"}
+
+
+class RAB_OT_add_billee_arm(Operator):
+    bl_idname = "rab.add_billee_arm"
+    bl_label = "Add BILLEE Arm"
+    bl_description = "Add the five-axis arm as its own module. Mount it to a rover in the Assembly tab"
+    bl_options = UNDO
+
+    @classmethod
+    def poll(cls, context):
+        return not any(m.kind == "arm" for m in context.scene.rab.modules)
+
+    def execute(self, context):
+        from .demo_scene import add_module
+
+        add_module(context.scene, build_billee_arm())
+        context.scene.rab.export_format = "billee"
+        context.scene.rab.ui_tab = "arm"
         return {"FINISHED"}
 
 
@@ -858,6 +912,7 @@ class RAB_OT_create_demo(Operator):
 
 CLASSES = (
     RAB_OT_create_billee,
+    RAB_OT_add_billee_arm,
     RAB_OT_create_demo,
     RAB_OT_new_module,
     RAB_OT_duplicate_module,

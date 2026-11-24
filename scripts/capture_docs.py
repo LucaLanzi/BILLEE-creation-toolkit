@@ -25,7 +25,8 @@ def main() -> int:
                        "--", str(ROOT / "docs" / "images")], env, timeout=130)
         blend = str(Path(folder) / "billee.blend")
         scene = run([blender, "--background", "--factory-startup", "--python-exit-code", "1", "--python",
-                     str(ROOT / "tests" / "blender_billee_export.py"), "--", str(Path(folder) / "out"), blend], env)
+                     str(ROOT / "tests" / "blender_billee_export.py"), "--", str(Path(folder) / "out"), blend,
+                     "--with-arm"], env)
         if scene.returncode:
             sys.exit("Could not prepare the BILLEE scene:\n" + scene.stdout[-2000:] + scene.stderr[-1000:])
         billee = run([blender, "--enable-event-simulate", "--window-geometry", "0", "0", "1600", "1000", blend,

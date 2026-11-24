@@ -8,7 +8,7 @@ from pathlib import Path
 
 from rover_arm_builder.core import demo
 from rover_arm_builder.core import model as X
-from rover_arm_builder.core.billee_template import build_billee_project
+from rover_arm_builder.core.billee_template import build_billee_assembly, build_billee_project
 from rover_arm_builder.core.transforms import Transform
 from rover_arm_builder.exporters import billee as B
 from rover_arm_builder.exporters.package import PackageConflict
@@ -132,14 +132,48 @@ class DropinMapping(unittest.TestCase):
         self.assertIn("libign_ros2_control-system.so", text)
         self.assertIn("/gz/odom", text)
 
-    def test_arm_joints_are_frozen_with_a_warning(self):
-        arm = demo.build_arm()
-        self.project.modules.append(arm)
-        self.project.mounts.append(X.Mount("m", "mod_billee", "frm_arm_mount", "mod_arm", "frm_arm_base_mount"))
-        files, plan, _ = self.build()
-        self.assertEqual(set(plan.frozen), {"arm_shoulder_yaw_joint", "arm_elbow_pitch_joint"})
-        self.assertEqual(joint(core(files), "arm_elbow_pitch_joint").get("type"), "fixed")
-        self.assertIn("billee_frozen_joint", {i.code for i in plan.issues})
+    def test_mounted_arm_stays_movable_and_rover_wiring_is_unchanged(self):
+        project = build_billee_assembly()
+        files, plan, _ = B.build_files(project, self.wiring)
+        self.assertEqual(plan.frozen, [])
+        self.assertEqual(plan.arm.arm_joints, [f"joint_arm_{n}" for n in range(1, 6)])
+        self.assertEqual(plan.arm.gripper_joints, ["joint_gripper"])
+        self.assertEqual(joint(core(files), "joint_arm_3").get("type"), "revolute")
+        for name in ("urdf/ros2_control.urdf.xacro", "urdf/robot.urdf.xacro", "config/controllers.yaml"):
+            source = (B.BUNDLED / name).read_bytes()
+            if name.endswith("controllers.yaml"):
+                self.assertNotIn(b"arm", files[name].replace(b"diff_drive", b""))
+            else:
+                self.assertEqual(files[name], source, name)
+
+    def test_arm_simulation_control_is_inactive_on_real_hardware(self):
+        files, _, _ = B.build_files(build_billee_assembly(), self.wiring)
+        text = files["urdf/robot_core.urdf.xacro"].decode()
+        block = text[text.index('<xacro:if value="${use_sim}">'):text.index("</xacro:if>")]
+        self.assertIn("ign_ros2_control/IgnitionSystem", block)
+        for number in range(1, 6):
+            self.assertIn(f'name="joint_arm_{number}"', block)
+        self.assertIn('name="joint_gripper"', block)
+        self.assertEqual(text.count("<ros2_control"), 1)
+
+    def test_suspension_on_a_rover_with_an_arm_is_still_frozen(self):
+        project = build_billee_assembly()
+        rover = project.modules[0]
+        rover.links.append(X.Link("lnk_extra", "extra_pivot", [
+            X.Component("c_extra", "extra", X.MassSpec(X.MassMode.ESTIMATED, Transform.from_xyz_rpy((0, 0, -0.2)),
+                                                       X.Box(0.02, 0.02, 0.02), 0.1))]))
+        rover.joints.append(X.Joint("j_extra", "extra_pivot_joint", X.JointType.REVOLUTE, "lnk_base", "lnk_extra",
+                                    axis=(0, 1, 0), limit=X.JointLimit(-0.1, 0.1, 1.0, 1.0),
+                                    actuation=X.Actuation.PASSIVE, role=X.ControlRole.PASSIVE_SUSPENSION))
+        plan = B.analyze(project)
+        self.assertEqual(plan.frozen, ["rover_extra_pivot_joint"])
+
+    def test_real_arm_gaps_are_reported_without_blocking_simulation(self):
+        plan = B.analyze(build_billee_assembly())
+        self.assertTrue(plan.ready)
+        self.assertIn("joint_arm_1: missing CAN node ID", plan.real_arm_gaps)
+        self.assertIn("joint_gripper: missing RoboClaw address", plan.real_arm_gaps)
+        self.assertTrue(any("velocity state" in gap for gap in plan.real_arm_gaps))
 
     def test_wrong_wheel_count_is_explained(self):
         with self.assertRaises(ExportBlocked) as caught:

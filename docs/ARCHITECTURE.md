@@ -73,6 +73,24 @@ Off-diagonal terms follow URDF, for example `ixy = -integral(x * y dm)`.
 are assigned by position: left runs rear to front (`l1` to `l3`), right runs front to rear (`r1` to `r3`). It only reads
 the software repo, and it refuses to overwrite a `robot_description` folder it did not generate.
 
+## Modular arm and MoveIt export
+
+The rover and arm remain independent modules. `exporters/billee_arm.py` finds the arm chain from the tool frame, groups
+controllers by motor system, and generates `billee_arm_moveit_config`.
+
+```
+Rover stack (unchanged)                    billee_arm_moveit_config
+  rover.launch.py                            moveit.launch.py
+  diff_drive_controller  ---------+          arm_can_controller    axes 1-3
+  joint_state_broadcaster         |          arm_usb_controller    axes 4-5
+                                  +--------  gripper_controller    end effector
+  /controller_manager in Gazebo              move_group + OMPL + KDL
+```
+
+In simulation, a `use_sim`-only `ros2_control` block in `robot_core.urdf.xacro` gives Gazebo the arm joints. With
+`use_sim:=false` the block disappears, so the rover's real controller manager sees exactly the wiring it has today. The
+SRDF has no virtual joint: the planning frame is the URDF root, `base_footprint`, so plans stay relative to the rover.
+
 ## Export safety
 
 Files are generated in memory, written to a staging folder, then moved into place. A hash manifest detects edited

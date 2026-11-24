@@ -1,6 +1,8 @@
-"""Create the BILLEE rover and export robot_description through the real Blender operators.
+"""Create the BILLEE model and export it through the real Blender operators.
 
-Run: blender --background --factory-startup --python tests/blender_billee_export.py -- <output_dir>
+Run: blender --background --factory-startup --python tests/blender_billee_export.py -- <output_dir> [scene.blend] [--with-arm]
+
+With --with-arm, it also exports the arm by itself into <output_dir>/standalone.
 """
 
 import os
@@ -17,22 +19,36 @@ import rover_arm_builder  # noqa: E402
 
 
 def main():
-    output = sys.argv[sys.argv.index("--") + 1]
+    after = sys.argv[sys.argv.index("--") + 1:]
+    with_arm = "--with-arm" in after
+    arguments = [item for item in after if not item.startswith("--")]
+    output = arguments[0]
     bpy.ops.wm.read_factory_settings(use_empty=True)
     rover_arm_builder.register()
-    if bpy.ops.rab.create_billee() != {"FINISHED"}:
-        raise RuntimeError("Create BILLEE Rover failed")
+    if bpy.ops.rab.create_billee(with_arm=with_arm) != {"FINISHED"}:
+        raise RuntimeError("Create BILLEE model failed")
     scene = bpy.context.scene
+    data = scene.rab
     bpy.ops.rab.validate()
-    print(f"DROPIN_STATUS {scene.rab.billee_status}")
-    scene.rab.export_dir = output
+    print(f"DROPIN_STATUS {data.billee_status}")
+    data.export_dir = output
     if bpy.ops.rab.export_package() != {"FINISHED"}:
         raise RuntimeError("Export failed")
-    print(f"DROPIN_EXPORT {scene.rab.last_export}")
-    arguments = sys.argv[sys.argv.index("--") + 1:]
+    print(f"DROPIN_EXPORT {data.last_export}")
+
+    if with_arm:
+        data.export_scope = "active"
+        data.active_module = next(i for i, m in enumerate(data.modules) if m.kind == "arm")
+        data.export_dir = os.path.join(output, "standalone")
+        if bpy.ops.rab.export_package() != {"FINISHED"}:
+            raise RuntimeError("Standalone arm export failed")
+        print(f"ARM_EXPORT {data.last_export}")
+        data.export_scope = "assembly"
+        data.active_module = 0
+
     if len(arguments) > 1:
-        scene.rab.last_export = ""
-        scene.rab.export_dir = "~/Desktop/billee-export"
+        data.last_export = ""
+        data.export_dir = "~/Desktop/billee-export"
         bpy.ops.wm.save_as_mainfile(filepath=arguments[1])
 
 

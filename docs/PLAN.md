@@ -23,11 +23,12 @@
 | Installers and README | Done. Linux tested |
 | BILLEE drop-in `robot_description` | Done and tested in simulation with the unmodified launch files |
 | Drop-in on the real ODESC drivetrain | Not tested |
-| MoveIt SRDF and launch | Generated, not tested. MoveIt is not in the BILLEE environment |
+| Modular arm and MoveIt package | Done and tested in Gazebo, with mock hardware, and with `pxx` in mock mode |
+| Real arm motors | Blocked on RoboClaw velocity state and real motor IDs |
 | Windows and macOS | Not yet run |
 
 ## Next steps
 
 1. Run the installers on a Windows PC and an Apple Silicon Mac.
-2. Add MoveIt 2 for Humble to an environment and test arm planning.
+2. Resolve the RoboClaw velocity-state gap and enter real motor IDs.
 3. Author the real BILLEE rover and arm with measured values.

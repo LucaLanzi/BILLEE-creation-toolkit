@@ -526,6 +526,52 @@ class DemoAndOperatorTests(Base):
             finally:
                 os.environ["HOME"] = previous
 
+    def test_rover_arm_and_assembly_export_separately(self):
+        data = self.scene.rab
+        self.assertEqual(bpy.ops.rab.create_billee(with_arm=True), {"FINISHED"})
+        self.assertEqual(data.billee_status, "Ready: rover and arm packages")
+        arm_index = next(i for i, m in enumerate(data.modules) if m.kind == "arm")
+        rover_index = next(i for i, m in enumerate(data.modules) if m.kind == "rover")
+        with tempfile.TemporaryDirectory() as folder:
+            data.export_dir = os.path.join(folder, "assembly")
+            self.assertEqual(bpy.ops.rab.export_package(), {"FINISHED"})
+            core = open(os.path.join(folder, "assembly", "robot_description", "urdf", "robot_core.urdf.xacro")).read()
+            self.assertIn('name="joint_arm_5" type="revolute"', core)
+            self.assertTrue(os.path.isfile(os.path.join(folder, "assembly", "billee_arm_moveit_config", "config", "robot.srdf")))
+
+            data.export_scope = "active"
+            data.active_module = rover_index
+            data.export_dir = os.path.join(folder, "rover")
+            self.assertEqual(bpy.ops.rab.export_package(), {"FINISHED"})
+            core = open(os.path.join(folder, "rover", "robot_description", "urdf", "robot_core.urdf.xacro")).read()
+            self.assertNotIn("joint_arm", core)
+            self.assertFalse(os.path.exists(os.path.join(folder, "rover", "billee_arm_moveit_config")))
+
+            data.active_module = arm_index
+            data.export_dir = os.path.join(folder, "arm")
+            self.assertEqual(bpy.ops.rab.export_package(), {"FINISHED"})
+            self.assertTrue(os.path.isfile(os.path.join(folder, "arm", "billee_arm_moveit_config", "urdf", "arm.urdf")))
+            self.assertFalse(os.path.exists(os.path.join(folder, "arm", "robot_description")))
+        data.export_scope = "assembly"
+
+    def test_arm_can_be_added_to_a_rover_and_motor_ids_round_trip(self):
+        data = self.scene.rab
+        self.assertEqual(bpy.ops.rab.create_billee(), {"FINISHED"})
+        self.assertEqual(bpy.ops.rab.add_billee_arm(), {"FINISHED"})
+        arm = next(m for m in data.modules if m.kind == "arm")
+        first = next(j for j in arm.joints if j.name == "joint_arm_1")
+        first.node_id = 7
+        wrist = next(j for j in arm.joints if j.name == "joint_arm_4")
+        wrist.roboclaw_address = 129
+        wrist.roboclaw_channel = "M2"
+        update()
+        model, _ = E.validate_scene(self.scene)
+        joints = {j.name: j for j in model.module(arm.uid).joints}
+        self.assertEqual(joints["joint_arm_1"].drive.node_id, 7)
+        self.assertEqual((joints["joint_arm_4"].drive.address, joints["joint_arm_4"].drive.channel), (129, "M2"))
+        self.assertEqual(joints["joint_arm_4"].drive.qppr, 538)
+        self.assertIsNone(joints["joint_arm_2"].drive.node_id)
+
     def test_readiness_goes_stale_after_edit(self):
         import json
 

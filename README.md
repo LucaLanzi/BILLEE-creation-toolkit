@@ -5,9 +5,10 @@ ROS 2 package that runs on the BILLEE software stack.
 
 ![The toolkit in Blender, previewing the demo arm](docs/images/03-joint-preview.png)
 
-- **Three workspaces:** Rover, Arm, and Assembly share one robot model.
-- **Real engineering data:** joints, limits, frames, mass, center of mass, inertia, and collision shapes.
-- **One-click export:** URDF, Xacro, `ros2_control`, Gazebo, and a ready-to-build ROS 2 package.
+- **Modular by design:** build the **Rover** and **Arm** separately, then join them in **Assembly**.
+- **Rover export:** a drop-in `robot_description` for `billee-software-2027`, with no changes to that repo.
+- **Arm export:** a complete MoveIt 2 package for planning and control.
+- **Real engineering data:** joints, limits, frames, motors, mass, center of mass, inertia, and collision shapes.
 - **Works offline:** you do not need ROS installed to design or export a robot.
 
 ## Contents
@@ -15,6 +16,7 @@ ROS 2 package that runs on the BILLEE software stack.
 - [Install](#install)
 - [Build your first robot](#build-your-first-robot)
 - [Replace the BILLEE robot model](#replace-the-billee-robot-model)
+- [Use the arm with MoveIt 2](#use-the-arm-with-moveit-2)
 - [Standalone ROS 2 packages](#standalone-ros-2-packages)
 - [What has been tested](#what-has-been-tested)
 - [Development](#development)
@@ -68,8 +70,9 @@ sh Install-Linux.sh --uninstall        # Linux
 
 ## Build your first robot
 
-Press **Create BILLEE Rover** to start from BILLEE's six-wheel layout, or **Create Demo Robot** to look around with a
-small example. Chassis shapes, masses, and demo values are placeholders, so replace them with measured values.
+Press **Create BILLEE Rover** for BILLEE's six-wheel layout, **Create BILLEE Rover + Arm** for both modules already
+mounted, or **Create Demo Robot** to look around with a small example. Shapes, masses, and limits are placeholders, so
+replace them with measured values.
 
 ### 1. Create the rover and its links
 
@@ -155,9 +158,9 @@ in that repo need to change.
 ![BILLEE drop-in export](docs/images/11-billee-dropin.png)
 
 1. **Build the rover** with six driven wheels, three on each side. Use X forward, Y left, and Z up.
-2. **Press Check Model.** Under **Export**, wait for **Ready to replace robot_description**.
+2. **Press Check Model.** Under **Export**, wait for a **Ready** message.
 3. **Export.** Set **For** to **BILLEE Rover (drop-in)**, choose a folder *outside* the software repo, and press
-   **Export robot_description**.
+   **Export for BILLEE**. Set **Export** to **Active Module Only** if you want just the selected rover or arm.
 4. **Drag and drop.** Drag the new `robot_description` folder onto `billee-software-2027/ros2_ws/src/` and choose
    **Replace** or **Merge**. Either works.
 5. **Rebuild** from the software repo's dev container:
@@ -189,10 +192,58 @@ git restore ros2_ws/src/robot_description && git clean -fd ros2_ws/src/robot_des
 If `~/billee-software-2027` exists, the export reads its current wiring and never writes to it. Otherwise, set the
 **Software** folder or use the bundled copy from commit `e18b1f7`.
 
-> **Arm and suspension joints export as fixed.** The rover software has no controller for them today, and its current
-> model also uses a fixed suspension. The toolkit warns you about each joint it freezes.
+> **Suspension joints export as fixed**, because the rover software has no controller for them and its current model
+> also uses a fixed suspension. The toolkit warns you about each joint it freezes. **Arm joints stay movable.**
 
-The export also writes `robot_description_export.md` beside the folder, listing exactly how each wheel was mapped.
+The export also writes `robot_description_export.md` beside the folder, listing how each wheel and arm joint was mapped.
+
+## Use the arm with MoveIt 2
+
+The arm is its own module with its own package. An assembled export keeps the rover's drivetrain wiring identical and
+adds `billee_arm_moveit_config` beside `robot_description`.
+
+![The rover and arm joined in the Assembly tab](docs/images/12-billee-assembly.png)
+
+| You export | You get |
+|---|---|
+| **Rover** (Active Module Only) | `robot_description` for the existing rover software |
+| **Arm** (Active Module Only) | A standalone MoveIt package with its own model and mock hardware |
+| **Complete Robot** | Both, with MoveIt planning around the full rover |
+
+### Set up each arm joint
+
+Select a joint in **Joints and Motion**, set its **Control Role** to **Arm / manipulation** or **End effector**, and fill
+in **Real motor**. Simulation works before these IDs are known.
+
+![Motor settings on an arm joint](docs/images/13-billee-arm-motor.png)
+
+| Axis | Motor | System | You provide |
+|---|---|---|---|
+| 1, 2, 3 | P20 or P17 | CAN (`pxx`) | CAN node ID, gear ratio |
+| 4, 5, end effector | goBILDA 5203 19.2:1 | RoboClaw 2x7A over USB | Address, M1 or M2, encoder counts |
+
+### Run it in simulation
+
+MoveIt is not part of the software repo's environment, so the toolkit adds it as a separate layer. Run this once:
+
+```sh
+make moveit-env   # Multi-GB download. Does not change billee-software-2027
+```
+
+Start the rover from its dev container or dashboard in simulation. Then, in another terminal:
+
+```sh
+bash scripts/moveit_shell.sh ~/Desktop/billee-export
+ros2 launch billee_arm_moveit_config moveit.launch.py
+```
+
+This starts `move_group`, adds the arm controllers to the running rover, and plans with the chassis in the collision
+model. Planning groups are `arm` and `gripper`, with named poses `home`, `stow`, `open`, and `closed`. A five-axis arm
+can't reach every position and orientation, so tool goals are position-only.
+
+> **Real arm motors are not enabled yet.** The CAN axes work with the `pxx` driver in mock mode. The pinned RoboClaw
+> driver reports position only, while the Humble trajectory controller needs a velocity state for velocity commands.
+> The export report lists everything still open.
 
 ## Standalone ROS 2 packages
 
@@ -220,10 +271,13 @@ overwriting it.
 | Real `xacro`, URDF parser, and TF on ROS 2 Humble | **Tested** |
 | Gazebo Fortress: spawn, settle, arm control, wheel drive | **Tested** |
 | Drop-in `robot_description` with the unmodified BILLEE launch files in simulation | **Tested** |
+| MoveIt 2.5.9 on the BILLEE stack in Gazebo: plan, execute, gripper, IK, chassis collision rejection | **Tested** |
+| Standalone arm with mock hardware | **Tested** |
+| CAN arm axes with the real `pxx` driver in mock mode | **Tested** |
+| Real arm motors | **Not enabled.** RoboClaw axes need a driver change first |
 | Drop-in model on the real ODESC drivetrain | **Not tested.** The CAN wiring is copied unchanged |
 | Windows and macOS installers | **Not yet run on those systems** |
 | RViz window | **Not yet opened** |
-| MoveIt | **Not tested.** It is not in the BILLEE Humble environment, so the generated config is a starting point |
 
 Details are in [docs/TESTING.md](docs/TESTING.md) and known limits are in [docs/LIMITATIONS.md](docs/LIMITATIONS.md).
 
@@ -237,6 +291,7 @@ make check    # Every local check, in an isolated Blender profile
 make gui      # Also opens a real Blender window
 make ros      # Real ROS 2 Humble and Gazebo checks, using the billee-software-2027 container
 make dropin   # Run the generated robot_description through the unmodified BILLEE launch files
+make moveit   # Plan and execute the arm with MoveIt on the unmodified rover stack
 make bundle   # Build the installer ZIP for all platforms
 make docs     # Recapture the screenshots in this README
 ```

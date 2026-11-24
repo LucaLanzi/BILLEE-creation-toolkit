@@ -13,8 +13,8 @@ make docs   # Screenshots, plus the mouse-drag and cancel test
 
 | Check | Result |
 |---|---|
-| Core and exporter unit tests | 76 passed |
-| Headless tests inside Blender | 36 passed |
+| Core and exporter unit tests | 93 passed |
+| Headless tests inside Blender | 38 passed |
 | Extension build, manifest validation, ZIP validation | Passed |
 | Install, enable/disable/re-enable three times, uninstall | Passed, no leftover handlers or classes |
 | One-step install, reinstall, uninstall from a path with spaces | Passed on Linux |
@@ -41,7 +41,7 @@ mounted read-only and the container has no network. The demo package is exported
 | 2. `check_urdf` parses every model | Passed |
 | 2. Expanded Xacro numerically equals the plain URDF | Passed |
 | 3. Published TF matches forward kinematics from the URDF | Passed |
-| 4. MoveIt arm planning | **Not run. MoveIt is not in this environment** |
+| 4. MoveIt arm planning | Passed. See the MoveIt check below |
 | 5. Gazebo Fortress spawn with all joints publishing state | Passed |
 | 5. Rover settles at the expected height and stays upright | Passed: z = 0.190 m, 0.000 rad tilt |
 | 5. Arm reaches a joint-space goal through `joint_trajectory_controller` | Passed |
@@ -74,10 +74,30 @@ The render sensor is removed from temporary copies during simulation because the
 verified in the SDF. `real.launch.py` reaches hardware loading with both models, then both stop because the ODESC plugin
 could not be created on this desktop, so **the generated model has not driven the real motors**.
 
+## MoveIt check
+
+`make moveit` exports the rover and arm through the Blender operators, then runs them on the unmodified `rover.launch.py`.
+MoveIt 2.5.9 comes from the team's RoboStack channel in a separate layer. All 917 installed packages are pinned to their
+current versions, and none were replaced.
+
+| Area | Result |
+|---|---|
+| Rover drivetrain wiring is identical with the arm attached | Passed |
+| Assembled model passes the URDF parser | Passed |
+| Arm holds under hard rover acceleration with no arm controller | Passed |
+| Rover and arm controllers active together | Passed |
+| Plans and executes joint goals in Gazebo across CAN and USB controller groups | Passed |
+| End effector moves through its own MoveIt group | Passed |
+| Forward kinematics, position IK, and planning to a tool position | Passed |
+| Detects a collision with the chassis and refuses to plan into it | Passed |
+| Returns home, and the rover still drives with MoveIt running | Passed |
+| Standalone arm plans and executes with mock hardware | Passed |
+| Real `pxx` driver in mock mode accepts the CAN controller and follows a trajectory | Passed |
+
 ## Not run
 
+- Real arm motors, including any RoboClaw motion.
 - The generated model on the real ODESC drivetrain.
-- MoveIt planning.
 - Any run on Windows or macOS, including their installers.
 - Linux Flatpak discovery.
 - Drag-and-drop and Install from Disk.

@@ -288,7 +288,7 @@ def _check_joint(joint, report: ValidationReport) -> None:
         report.add("zero_axis", joint.source_id, f"{joint.name} needs a nonzero joint axis.",
                    f"Select {joint.name} and open its axis.")
     if joint.actuation is Actuation.PASSIVE and joint.role in (
-        ControlRole.ARM, ControlRole.BASE_DRIVE, ControlRole.STEERING
+        ControlRole.ARM, ControlRole.GRIPPER, ControlRole.BASE_DRIVE, ControlRole.STEERING
     ):
         report.add("role_mismatch", joint.source_id,
                    f"{joint.name} is passive but assigned to {joint.role.value} control.",

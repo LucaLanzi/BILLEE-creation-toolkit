@@ -14,6 +14,7 @@ from .model import (
     JointLimit,
     JointType,
     Module,
+    MotorDrive,
     Project,
     resolve_mass,
 )
@@ -48,6 +49,7 @@ class FlatJoint:
     friction: float = 0.0
     actuation: Actuation = Actuation.FIXED
     role: ControlRole = ControlRole.UNASSIGNED
+    drive: MotorDrive | None = None
 
 
 @dataclass
@@ -143,6 +145,7 @@ def _flatten_module(module: Module, robot: FlatRobot) -> None:
                 friction=joint.friction,
                 actuation=joint.actuation,
                 role=joint.role,
+                drive=joint.drive,
             )
         )
 

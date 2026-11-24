@@ -57,6 +57,14 @@ def _build_module(scene, source):
             joint.role = item.role.value
             joint.damping = item.damping
             joint.friction = item.friction
+            if item.drive is not None:
+                joint.drive_kind = item.drive.kind.value
+                joint.motor = item.drive.motor
+                joint.gear_ratio = item.drive.gear_ratio
+                joint.node_id = item.drive.node_id or 0
+                joint.roboclaw_address = item.drive.address or 0
+                joint.roboclaw_channel = item.drive.channel or "none"
+                joint.qppr = item.drive.qppr or 0
             limit = item.limit
             if limit is not None:
                 if limit.lower is not None and limit.upper is not None:
@@ -93,6 +101,12 @@ def _build_module(scene, source):
             entry.joint_uid = joint_uids[joint_id]
             entry.value = value
     return module_uid
+
+
+def add_module(scene, source):
+    """Add one standalone module, such as an arm, without mounting it."""
+    _build_module(scene, source)
+    A.apply_all(scene)
 
 
 def build_demo(scene, project=None):

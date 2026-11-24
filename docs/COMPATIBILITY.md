@@ -27,9 +27,16 @@ The target matches the locked environment in
 | Controllers | `joint_trajectory_controller` 2.53.1, velocity controllers | Tested |
 | Gazebo control | `ign_ros2_control` 0.7.19, `ign_ros2_control/IgnitionSystem` | Tested |
 | Gazebo launch | `ros_gz_sim` 0.244.24 | Tested |
-| MoveIt 2 | Not in the BILLEE environment | **Not tested** |
+| MoveIt 2 | 2.5.9 from `robostack-humble`, in a separate layer | Tested in Gazebo |
+| Arm CAN driver | `pxx/PxxSystemHardware`, position command | Tested in mock mode |
+| Arm USB driver | `roboclaw_hardware_interface` at `ae00980`, velocity command | **Blocked: no velocity state** |
 
-Generated packages do not declare MoveIt as a dependency, so they build without it.
+MoveIt 2.5.10 requires a newer ROS build than the team's lock. MoveIt 2.5.9 matches it and the team's `moveit2` fork.
+The drop-in `robot_description` does not depend on MoveIt. Only `billee_arm_moveit_config` does.
+
+The 5203 19.2:1 encoder count comes from the
+[goBILDA specification](https://www.gobilda.com/5202-series-yellow-jacket-planetary-gear-motor-19-2-1-ratio-24mm-length-6mm-d-shaft-312-rpm-36mm-gearbox-3-3-5v-encoder/)
+and [motor listing](https://core-electronics.com.au/5203-series-yellow-jacket-planetary-gear-motor-1921-ratio-24mm-length-8mm-rex-shaft-312-rpm-33-5v-encoder.html).
 
 The BILLEE drop-in export was verified against `billee-software-2027` branch `PreRelease-DashBoardDev`, commit `e18b1f7`.
 

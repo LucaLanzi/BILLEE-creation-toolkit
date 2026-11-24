@@ -132,7 +132,10 @@ class RAB_PT_main(RobotPanel, Panel):
             layout.prop(module, "prefix", text="Prefix")
         else:
             layout.operator("rab.create_billee", icon="AUTO")
+            layout.operator("rab.create_billee", text="Create BILLEE Rover + Arm", icon="CON_KINEMATIC").with_arm = True
             layout.operator("rab.create_demo", icon="OBJECT_DATA")
+        if project.ui_tab == "arm" and not any(m.kind == "arm" for m in project.modules):
+            layout.operator("rab.add_billee_arm", icon="CON_KINEMATIC")
         layout.operator("rab.setup_workspace", icon="WORKSPACE")
 
 
@@ -269,6 +272,21 @@ class RAB_PT_joint(BuilderPanel, Panel):
         row = box.row(align=True)
         row.prop(joint, "damping")
         row.prop(joint, "friction")
+
+        if joint.role in {"arm", "gripper"}:
+            box = layout.box()
+            box.label(text="Real motor", icon="AUTO")
+            box.prop(joint, "drive_kind", text="System")
+            if joint.drive_kind != "none":
+                box.prop(joint, "motor")
+                box.prop(joint, "gear_ratio")
+            if joint.drive_kind == "can":
+                box.prop(joint, "node_id")
+            elif joint.drive_kind == "roboclaw":
+                box.prop(joint, "roboclaw_address", text="Address")
+                box.prop(joint, "roboclaw_channel")
+                box.prop(joint, "qppr", text="Counts / Turn")
+            _note(box, context, "Simulation works without IDs. Real motors stay off until they are set.", "INFO")
 
         box = layout.box()
         box.label(text="Motion preview (never exported)", icon="PLAY")
@@ -422,6 +440,7 @@ class RAB_PT_export(RobotPanel, Panel):
         project = context.scene.rab
         layout.prop(project, "export_format", text="For")
         if project.export_format == "billee":
+            layout.prop(project, "export_scope", text="Export")
             layout.prop(project, "export_dir", text="Folder")
             layout.prop(project, "billee_repo", text="Software")
             if billee_status_is_current() and project.billee_status:
@@ -429,10 +448,10 @@ class RAB_PT_export(RobotPanel, Panel):
                 _note(layout, context, project.billee_status, "CHECKMARK" if ready else "ERROR")
             else:
                 _note(layout, context, "Press Check Model to confirm this rover fits the software stack.", "QUESTION")
-            layout.operator("rab.export_package", text="Export robot_description", icon="EXPORT")
+            layout.operator("rab.export_package", text="Export for BILLEE", icon="EXPORT")
             if project.last_export:
                 _note(layout, context, f"Last: {project.last_export}", "CHECKMARK")
-                _note(layout, context, "Drag this folder over ros2_ws/src/robot_description, then rebuild.", "INFO")
+                _note(layout, context, "Drag the exported package folders into ros2_ws/src, then rebuild.", "INFO")
             return
         layout.prop(project, "export_scope", text="Export")
         layout.prop(project, "export_target", text="Ready For")
